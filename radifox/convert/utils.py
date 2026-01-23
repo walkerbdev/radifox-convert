@@ -28,9 +28,10 @@ def copytree_link(source: Path, dest: Path, method: str) -> None:
     dest.mkdir(parents=True, exist_ok=True)
     for path in source.glob("*"):
         if path.is_file():
-            func(path, dest / path.name)
+            if not (dest / path.name).exists():
+                func(path, dest / path.name)
         elif path.is_dir():
-            (dest / path.name).mkdir()
+            (dest / path.name).mkdir(exist_ok=True)
             copytree_link(path, dest / path.name, method)
 
 

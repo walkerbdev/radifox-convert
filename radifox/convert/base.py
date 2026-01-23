@@ -473,6 +473,7 @@ class BaseSet:
         date_shift_days: int = 0,
         manual_names: Optional[dict] = None,
         input_hash: Optional[str] = None,
+        skip_existing: bool = False,
     ) -> None:
         self.__version__ = {"radifox": __version__, "dcm2niix": get_software_versions()["dcm2niix"]}
         self.ConversionSoftwareVersions = get_software_versions()
@@ -489,6 +490,7 @@ class BaseSet:
         self.RemoveIdentifiers = remove_identifiers
         self.DateShiftDays = date_shift_days
         self.OutputRoot = output_root
+        self.SkipExisting = skip_existing
         self.SeriesList = []
 
     def __repr_json__(self) -> dict:
@@ -789,14 +791,45 @@ class BaseSet:
                     di.NiftiName = None
                     di.ConvertImage = False
 
+    def _check_skip_provenance(self, nii_dir: Path, convert_di: list[BaseInfo]) -> bool:
+        """Check if all NIfTI outputs for a source exist and have matching provenance.
+
+        Compares per-series SourceHash, software versions, and LUT against existing sidecars.
+        Returns True if all series can be safely skipped.
+        """
+        for di in convert_di:
+            nii_file = nii_dir / (di.NiftiName + ".nii.gz")
+            sidecar_file = nii_dir / (di.NiftiName + ".json")
+            if not nii_file.exists() or not sidecar_file.exists():
+                return False
+            sidecar_data = json.loads(sidecar_file.read_text())
+            if sidecar_data.get("SeriesInfo", {}).get("SourceHash") != di.SourceHash:
+                logging.info("Source data changed for %s, will reconvert" % di.NiftiName)
+                return False
+            if sidecar_data.get("ConversionSoftwareVersions") != self.ConversionSoftwareVersions:
+                logging.info("Software versions changed for %s, will reconvert" % di.NiftiName)
+                return False
+            if sidecar_data.get("LookupTable", {}).get("LookupDict") != self.LookupTable.LookupDict:
+                logging.info("Lookup table changed for %s, will reconvert" % di.NiftiName)
+                return False
+        return True
+
     def create_all_nii(self) -> None:
         if self.RemoveIdentifiers:
             self.anonymize()
         source_dict = defaultdict(list)
         for di in self.SeriesList:
             source_dict[di.SourcePath].append(di)
+        nii_dir = self.OutputRoot / self.Metadata.dir_to_str() / "nii"
         for source_path, di_list in source_dict.items():
             if any(di.ConvertImage for di in di_list):
+                convert_di = [di for di in di_list if di.ConvertImage]
+                if self.SkipExisting and self._check_skip_provenance(nii_dir, convert_di):
+                    logging.info("Skipping %s (outputs exist with matching provenance)" % source_path)
+                    for di in convert_di:
+                        di.NiftiCreated = True
+                        di.NiftiHash = hash_file_dir(nii_dir / (di.NiftiName + ".nii.gz"))
+                    continue
                 logging.info("Creating Nifti for %s" % source_path)
                 create_nii(self.OutputRoot / self.Metadata.dir_to_str(), source_path, di_list)
                 for di in di_list:
@@ -809,6 +842,12 @@ class BaseSet:
             key=lambda x: x.ConvertImage,
             reverse=True,
         )
+        if self.SkipExisting and nii_dir.exists():
+            expected = {di.NiftiName for di in self.SeriesList if di.NiftiName is not None}
+            for nii_file in nii_dir.glob("*.nii.gz"):
+                name = nii_file.name.replace(".nii.gz", "")
+                if name not in expected:
+                    logging.warning("Orphan file detected: %s (not in current series list)" % nii_file.name)
 
     def generate_sidecar(self, di_obj: BaseInfo) -> None:
         sidecar_file = (

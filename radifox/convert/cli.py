@@ -37,6 +37,11 @@ def convert(args: Optional[List[str]] = None) -> None:
         "--safe", action="store_true", help="Add -N to session ID, if session exists."
     )
     parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Skip series with existing NIfTI outputs if provenance matches (source data, software, LUT).",
+    )
+    parser.add_argument(
         "--no-project-subdir", action="store_true", help="Do not create project subdirectory."
     )
     parser.add_argument("--parrec", action="store_true", help="Source is PARREC.")
@@ -110,8 +115,12 @@ def convert(args: Optional[List[str]] = None) -> None:
     manual_names = json.loads(manual_json_file.read_text()) if manual_json_file.exists() else {}
 
     type_dirname = "%s" % "parrec" if args.parrec else "dcm"
+    skip_existing = False
     if (args.output_root / metadata.dir_to_str() / type_dirname).exists():
-        if args.safe:
+        if args.skip_existing:
+            skip_existing = True
+            logging.info("Output directory exists, will skip already converted series.")
+        elif args.safe:
             metadata.AttemptNum = 2
             while (args.output_root / metadata.dir_to_str() / type_dirname).exists():
                 metadata.AttemptNum += 1
@@ -182,6 +191,7 @@ def convert(args: Optional[List[str]] = None) -> None:
         manual_names,
         None,
         args.force_derived,
+        skip_existing,
     )
 
 
@@ -271,6 +281,7 @@ def update(args: Optional[List[str]] = None) -> None:
             0,
             manual_names,
             json_obj["InputHash"],
+            skip_existing=False,
         )
     except ExecError:
         logging.info("Exception caught during update. Resetting to previous state.")
