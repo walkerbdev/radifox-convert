@@ -1,12 +1,12 @@
-from codecs import BOM_UTF8
-from collections.abc import Sequence
 import csv
-from datetime import datetime, date, time, timedelta
 import logging
 import os
-from pathlib import Path
 import re
 import shutil
+from codecs import BOM_UTF8
+from collections.abc import Sequence
+from datetime import date, datetime, time, timedelta
+from pathlib import Path
 from subprocess import check_output
 
 import nibabel as nib
@@ -36,8 +36,8 @@ def copytree_link(source: Path, dest: Path, method: str) -> None:
 
 # http://stackoverflow.com/a/10840586
 def silentremove(filename: Path) -> None:
-    import shutil
     import errno
+    import shutil
 
     try:
         if filename.is_file():
@@ -57,7 +57,7 @@ def read_csv(csv_filename: Path) -> dict[str, list[str]]:
     data = data.split(line_sep)
     out_dict = {key: [] for key in data[0].split(",")}
     for row in csv.DictReader(data):
-        for key in out_dict.keys():
+        for key in out_dict:
             out_dict[key].append(row[key])
     return out_dict
 
@@ -100,14 +100,14 @@ vr_corr = {
 def extract_de(
     ds: Dataset | FileDataset,
     label: str,
-    series_uid,
+    series_uid: str | None,
     keep_list: bool = False,
 ) -> None | tuple | float | int | str:
     if label not in ds:
-        return tuple() if keep_list else None
+        return () if keep_list else None
     de = ds[label]
     if de.VM == 0:
-        return tuple() if keep_list else None
+        return () if keep_list else None
     value = [de.value] if de.VM == 1 else de.value
     try:
         out_list = []
@@ -116,10 +116,9 @@ def extract_de(
         out_list = tuple(out_list)
     except ValueError:
         logging.warning(
-            "Data element (%s) will not conform to required type (%s) for %s."
-            % (de.name, str(vr_corr[de.VR]), series_uid)
+            f"Data element ({de.name}) will not conform to required type ({str(vr_corr[de.VR])}) for {series_uid}."
         )
-        return tuple() if keep_list else None
+        return () if keep_list else None
     return out_list[0] if (len(out_list) == 1 and not keep_list) else out_list
 
 
@@ -136,7 +135,7 @@ def reorient(input_file: Path, orientation: str) -> bool:
     input_obj = nib.Nifti1Image.load(input_file)
     input_orient = "".join(nib.aff2axcodes(input_obj.affine))
     target_orient = ORIENT_CODES[orientation]
-    logging.debug("Reorienting %s from %s to %s." % (input_file, input_orient, target_orient))
+    logging.debug(f"Reorienting {input_file} from {input_orient} to {target_orient}.")
     if input_orient != tuple(target_orient):
         try:
             orig_ornt = nib.orientations.io_orientation(input_obj.affine)
@@ -148,7 +147,7 @@ def reorient(input_file: Path, orientation: str) -> bool:
             nib.Nifti1Image(data, affine, input_obj.header).to_filename(str(input_file))
             return True
         except ValueError:
-            logging.warning("Reorientation failed for %s" % input_file)
+            logging.warning(f"Reorientation failed for {input_file}")
             return False
 
 
@@ -172,9 +171,9 @@ def extract_archive(input_zipfile: Path, output_dir: Path) -> None:
 
 
 def make_tuple(item: bytes | str | Sequence) -> tuple:
-    if isinstance(item, (bytes, str)):
-        return tuple([item])
-    return tuple(item) if isinstance(item, Sequence) else tuple([item])
+    if isinstance(item, bytes | str):
+        return (item,)
+    return tuple(item) if isinstance(item, Sequence) else (item,)
 
 
 def remove_created_files(filename: Path) -> None:
@@ -200,7 +199,7 @@ def add_acq_num(name: str, count: int) -> str:
     contrast_arr = name.split("_")[-1].split("-")
     addons = "" if len(contrast_arr) == 6 else ("-" + "-".join(contrast_arr[6:]))
     base_contrast = "-".join(contrast_arr[:6])
-    return prefix + "_" + base_contrast + ("-ACQ%d" % count) + addons
+    return prefix + "_" + base_contrast + f"-ACQ{count}" + addons
 
 
 FILE_OCTAL = 0o660
@@ -247,13 +246,7 @@ def p_add(path: Path, extra: str) -> Path:
 
 
 def get_software_versions() -> dict[str, str]:
-    dcm2niix_version = (
-        check_output("dcm2niix --version; exit 0", shell=True)
-        .decode()
-        .strip()
-        .split("\n")[-1]
-        .strip()
-    )
+    dcm2niix_version = check_output("dcm2niix --version; exit 0", shell=True).decode().strip().split("\n")[-1].strip()
     return {"dcm2niix": dcm2niix_version}
 
 
@@ -262,13 +255,17 @@ def version_check(saved_version: str, current_version: str) -> bool:
         return False
     saved_arr = saved_version.split("-")[0].split(".")
     current_arr = current_version.split("-")[0].split(".")
-    for saved, current in zip(saved_arr, current_arr):
-        if int(saved) < int(current):
-            return False
-    return True
+    return all(int(saved) >= int(current) for saved, current in zip(saved_arr, current_arr, strict=False))
 
 
 def shift_date(datetime_str: str, date_shift_days: int = 0) -> str:
+    """Shift a datetime string by the given number of days.
+
+    Early return when date_shift_days is 0 or None to avoid a TypeError
+    from timedelta(days=None) when --anonymize is used without --date-shift-days.
+    """
+    if not date_shift_days:
+        return datetime_str
     orig_date = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M:%S")
     return (orig_date + timedelta(days=date_shift_days)).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -300,11 +297,7 @@ def fix_sf_headers(dataset: Dataset) -> Dataset:
     if "EffectiveEchoTime" in dataset:
         dataset.EchoTime = dataset.EffectiveEchoTime
     scan_seq: list = (
-        (
-            dataset.ScanningSequence
-            if dataset["ScanningSequence"].VM > 1
-            else [dataset.ScanningSequence]
-        )
+        (dataset.ScanningSequence if dataset["ScanningSequence"].VM > 1 else [dataset.ScanningSequence])
         if "ScanningSequence" in dataset
         else []
     )
@@ -320,11 +313,7 @@ def fix_sf_headers(dataset: Dataset) -> Dataset:
     dataset.ScanningSequence = sorted(set(scan_seq))
 
     seq_var: list = (
-        (
-            dataset.SequenceVariant
-            if dataset["SequenceVariant"].VM > 1
-            else [dataset.SequenceVariant]
-        )
+        (dataset.SequenceVariant if dataset["SequenceVariant"].VM > 1 else [dataset.SequenceVariant])
         if "SequenceVariant" in dataset
         else []
     )
@@ -349,7 +338,7 @@ def fix_sf_headers(dataset: Dataset) -> Dataset:
     )
     if dataset.get("RectilinearPhaseEncodeReordering", "LINEAR") != "LINEAR":
         scan_opts.append("PER")
-    frame_type3 = dataset.FrameType[2] if 'FrameType' in dataset else ""
+    frame_type3 = dataset.FrameType[2] if "FrameType" in dataset else ""
     if frame_type3 == "ANGIO":
         dataset.AngioFlag = "Y"
     if frame_type3.startswith("CARD"):
@@ -396,9 +385,9 @@ def parse_dcm2niix_suffixes(filenames: list[Path], base: str, add_mag: bool) -> 
         suffixes[i] = suffixes[i].replace("_real", "_REA")
         suffixes[i] = suffixes[i].replace("_imaginary", "_IMA")
         suffixes[i] = suffixes[i].replace("_t", "_DYN")
-    if add_mag or any([cplx in suffix for suffix in suffixes for cplx in ["PHA", "REA", "IMA"]]):
+    if add_mag or any(cplx in suffix for suffix in suffixes for cplx in ["PHA", "REA", "IMA"]):
         for i in range(len(suffixes)):
-            if not any([cplx in suffixes[i] for cplx in ["PHA", "REA", "IMA"]]):
+            if not any(cplx in suffixes[i] for cplx in ["PHA", "REA", "IMA"]):
                 suffixes[i] += "_MAG"
     # Replace numbers after DYN with 1,2,3... in order of original number
     dyn_nums = sorted(
@@ -411,7 +400,7 @@ def parse_dcm2niix_suffixes(filenames: list[Path], base: str, add_mag: bool) -> 
     for i in range(len(suffixes)):
         if re.search(r"_DYN(\d+)", suffixes[i]) is not None:
             dyn_idx = dyn_nums.index(int(re.search(r"_DYN(\d+)", suffixes[i]).group(1))) + 1
-            suffixes[i] = re.sub(r"_DYN(\d+)", "_DYN%d" % dyn_idx, suffixes[i])
+            suffixes[i] = re.sub(r"_DYN(\d+)", f"_DYN{dyn_idx}", suffixes[i])
     # Do the same for echoes
     echo_nums = sorted(
         {
@@ -423,5 +412,5 @@ def parse_dcm2niix_suffixes(filenames: list[Path], base: str, add_mag: bool) -> 
     for i in range(len(suffixes)):
         if re.search(r"_ECHO(\d+)", suffixes[i]) is not None:
             dyn_idx = echo_nums.index(int(re.search(r"_ECHO(\d+)", suffixes[i]).group(1))) + 1
-            suffixes[i] = re.sub(r"_ECHO(\d+)", "_ECHO%d" % dyn_idx, suffixes[i])
+            suffixes[i] = re.sub(r"_ECHO(\d+)", f"_ECHO{dyn_idx}", suffixes[i])
     return [tuple(sorted(suffix[1:].split("_"))) for suffix in suffixes]

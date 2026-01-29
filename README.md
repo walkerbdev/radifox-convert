@@ -36,7 +36,7 @@ For a full listing of command line options, see [Advanced CLI Usage](#advanced-c
 The `radifox-convert` script is used to convert DICOM files to NIfTI files using the `dcm2niix` tool.
 It is a wrapper around `dcm2niix` that uses the RADIFOX naming system to organize the output files.
 
-Example Usage:
+**Single subject conversion:**
 ```bash
 radifox-convert \
     --output-root /path/to/output \
@@ -47,6 +47,37 @@ radifox-convert \
 ```
 This will copy the files in the direction `/path/to/dicom_files` to the output directory `/path/to/output/study/123456/STUDY-1/dcm`, organize them and convert them to NIfTI.
 The NIfTI files (and their JSON sidecar files) will be placed in `/path/to/output/study/STUDY-123456/1/nii`.
+
+**Batch conversion** (`--batch`):
+```bash
+radifox-convert /path/to/dicom_parent_dir \
+    --output-root /path/to/output \
+    --project-id study \
+    --batch
+```
+In batch mode, `source` is treated as a parent directory containing subject subdirectories.
+The `PatientID` from DICOM headers is used as the subject ID and each subdirectory is converted automatically.
+The `--subject-id` and `--session-id` options are not used in batch mode.
+
+**Batch conversion with anonymization** (`--anon-db`):
+```bash
+radifox-convert /path/to/dicom_parent_dir \
+    --output-root /path/to/output \
+    --project-id study \
+    --anon-db /path/to/mapping.db \
+    --date-shift-days 42
+```
+When `--anon-db` is provided, batch mode and anonymization are automatically enabled. Random anonymous IDs replace patient identifiers, identifiers are hashed, UIDs are randomized, copied DICOM files are removed, and a full reversible mapping is stored in the SQLite database.
+The mapping database stores the original `PatientID`, `PatientName`, `PatientBirthDate`, `PatientSex`, source paths, original Study UIDs, Institution Names, and date shift days.
+If the same `PatientID` appears in multiple subdirectories, they are assigned the same anonymous ID with auto-incremented session numbers.
+
+Output directories will use the anonymous ID instead of the patient identifier:
+```
+/path/to/output/study/STUDY-A3F7B2C1D4E5/1/nii/...
+```
+
+The mapping database at `/path/to/mapping.db` contains the link between anonymous IDs and original patient identifiers.
+This file should be stored securely and separately from the converted output.
 
 #### `radifox-update`
 The `radifox-update` script is used to update naming for a directory of images.
@@ -60,6 +91,39 @@ radifox-update --directory /path/to/output/study/STUDY-123456/1
 This will update the naming for all images in the existing RADIFOX session directory `/path/to/output/study/STUDY-123456/1`.
 If the RADIFOX version, look-up table, or manual naming entries have changed, the images will be renamed to reflect the new information.
 If none of these have changed, the update will be skipped.
+
+**De-anonymization** (`--deanonymize`):
+
+The `--deanonymize` flag reverses anonymization using the mapping database created by `--anon-db`.
+It renames directories, files, and patches JSON sidecar metadata to restore original patient identifiers.
+
+What is restored:
+- Subject directories and filenames are renamed from anonymous IDs back to original `PatientID`
+- `SubjectID` in JSON sidecar metadata
+- `SourcePath` in JSON sidecar series entries
+- Original `InstitutionName` (un-hashed)
+- Original `StudyUID` (un-randomized)
+- Acquisition dates (date shift reversed, if applicable)
+
+What cannot be restored:
+- Raw DICOM/PARREC files (permanently deleted during anonymized conversion)
+
+```bash
+# De-anonymize all subjects
+radifox-convert \
+    --output-root /path/to/output \
+    --project-id study \
+    --anon-db /path/to/mapping.db \
+    --deanonymize
+
+# De-anonymize a single patient
+radifox-convert \
+    --output-root /path/to/output \
+    --project-id study \
+    --anon-db /path/to/mapping.db \
+    --deanonymize \
+    --subject 123456
+```
 
 # Conversion
 The conversion system is a wrapper around the `dcm2niix` tool.
@@ -149,7 +213,7 @@ Any output that is returned from the `run` method will have a QA image generated
 ### `radifox-convert`
 | Option                      | Description                                                                                                                            | Default                                           |
 |-----------------------------|----------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------|
-| `source`                    | The source directory (or zip file) containing the DICOM files.                                                                         | `required`                                        |
+| `source`                    | The source directory (or zip file) containing the DICOM files. Not required with `--deanonymize`.                                      | `required`                                        |
 | `-o`, `--output-root`       | The root directory for the output files (contains project directories).                                                                | `required`                                        |
 | `-p`, `--project-id`        | The project ID for the converted session.                                                                                              | `required`                                        |
 | `-s`, `--subject-id`        | The subject ID for the converted session.                                                                                              | `required`                                        |
@@ -168,10 +232,14 @@ Any output that is returned from the `run` method will have a QA image generated
 | `--parrec`                  | Convert PAR/REC files instead of DICOM files.                                                                                          | `False`                                           |
 | `--institution`             | The institution name to use for the session (required for PAR/REC conversion).                                                         | `None`                                            |
 | `--field-strength`          | The magnetic field strength to use for the session (required for PAR/REC conversion).                                                  | `None`                                            |
-| `--anonymize`               | Experimental anonymization support (will remove copied DICOM files).                                                                   | `False`                                           |
+| `--anonymize`               | Anonymize output (hashes identifiers, randomizes UIDs, removes copied DICOM files). For batch anonymization, use `--anon-db`.          | `False`                                           |
 | `--date-shift-days`         | The number of days to shift the date by during anonymization.                                                                          | `None`                                            |
 | `--tms-metafile`            | The TMS metafile to use for subject, site and session ID.                                                                              | `None`                                            |
 | `--force-derived`           | Convert derived/secondary DICOM series that would normally be skipped (e.g., images converted from NIfTI back to DICOM).               | `False`                                           |
+| `--batch`                   | Treat source as a parent directory of subject subdirectories. Incompatible with `-s`, `-e`, `--tms-metafile`, `--parrec`, `--symlink`, `--hardlink`, `--safe`. | `False`                                           |
+| `--anon-db`                 | Path to SQLite anonymization mapping database. Implies `--batch`. Created if it doesn't exist.                                         | `None` (no anonymization)                         |
+| `--deanonymize`             | Reverse anonymization using the mapping database. Requires `--anon-db` and `--project-id`. Incompatible with most other options.       | `False`                                           |
+| `--subject`                 | De-anonymize only this patient ID (only with `--deanonymize`).                                                                         | `None` (all subjects)                             |
 
 ### `radifox-update`
 | Option             | Description                                                | Default                               |
