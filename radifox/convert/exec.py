@@ -40,6 +40,7 @@ def run_conversion(
     date_shift_days: int,
     manual_names: dict,
     input_hash: Optional[str] = None,
+    force_derived: bool = False,
 ) -> None:
     session_path = output_root / metadata.dir_to_str()
     mkdir_p(session_path)
@@ -122,6 +123,7 @@ def run_conversion(
                 date_shift_days,
                 manual_names,
                 input_hash=input_hash,
+                force_derived=force_derived,
             )
         img_set.create_all_nii()
         img_set.generate_unconverted_info()

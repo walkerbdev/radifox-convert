@@ -69,7 +69,7 @@ It uses the RADIFOX naming system to organize the output files.
 The conversion process is as follows:
  1. Copy the DICOM files to the `dcm` directory in the session directory.
  2. Sort the DICOM files into series directories in the `dcm` directory and remove any duplicates.
- 3. Check for series that should be skipped (scouts, localizers, derived images, etc.).
+ 3. Check for series that should be skipped (scouts, localizers, derived images, etc.). Use `--force-derived` to include derived/secondary series.
  4. Generate image names automatically from the DICOM metadata, look-up tables, and manual naming entries.
  5. Convert the DICOM files to NIfTI using `dcm2niix` and rename to RADIFOX naming.
  6. Create the JSON sidecar files for the NIfTI files (contains some DICOM metadata).
@@ -171,6 +171,7 @@ Any output that is returned from the `run` method will have a QA image generated
 | `--anonymize`               | Experimental anonymization support (will remove copied DICOM files).                                                                   | `False`                                           |
 | `--date-shift-days`         | The number of days to shift the date by during anonymization.                                                                          | `None`                                            |
 | `--tms-metafile`            | The TMS metafile to use for subject, site and session ID.                                                                              | `None`                                            |
+| `--force-derived`           | Convert derived/secondary DICOM series that would normally be skipped (e.g., images converted from NIfTI back to DICOM).               | `False`                                           |
 
 ### `radifox-update`
 | Option             | Description                                                | Default                               |
