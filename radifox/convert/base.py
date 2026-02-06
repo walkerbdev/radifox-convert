@@ -135,12 +135,15 @@ class BaseInfo:
         )
         self.NiftiName = name_lambda(self.NiftiName)
 
-    def should_convert(self) -> bool:
+    def should_convert(self, force_derived: bool = False) -> bool:
         type_str = " ".join(self.ImageType[:2]).lower()
         series_desc = self.SeriesDescription.lower()
-        type_status = ("derived" not in type_str) or (
-            "derived" in type_str and "primary" in type_str
-        )
+        if force_derived:
+            type_status = True
+        else:
+            type_status = ("derived" not in type_str) or (
+                "derived" in type_str and "primary" in type_str
+            )
         desc_ignore = any([item in series_desc for item in DESCRIPTION_IGNORE]) or re.search(
             r"(?<!cervi)cal(?:\W|ibration|$)", series_desc
         )

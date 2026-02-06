@@ -164,6 +164,7 @@ class DicomSet(BaseSet):
         date_shift_days: int = 0,
         manual_names: Optional[dict] = None,
         input_hash: Optional[str] = None,
+        force_derived: bool = False,
     ) -> None:
         super().__init__(
             source,
@@ -175,6 +176,7 @@ class DicomSet(BaseSet):
             manual_names,
             input_hash,
         )
+        self.ForceDerived = force_derived
 
         logging.info("Loading DICOMs.")
         for dcmdir in sorted((output_root / self.Metadata.dir_to_str() / "dcm").glob("*")):
@@ -201,7 +203,7 @@ class DicomSet(BaseSet):
         study_nums, series_nums = self.get_unique_study_series(self.SeriesList)
         for di in self.SeriesList:
             logging.info("Processing %s" % di.SourcePath)
-            if di.should_convert():
+            if di.should_convert(force_derived=self.ForceDerived):
                 di.create_image_name(
                     self.Metadata.prefix_to_str(),
                     study_nums[di.SourcePath],

@@ -55,6 +55,12 @@ def convert(args: Optional[List[str]] = None) -> None:
     parser.add_argument(
         "--force-dicom", action="store_true", help="Force read DICOM files.", default=False
     )
+    parser.add_argument(
+        "--force-derived",
+        action="store_true",
+        help="Convert derived/secondary DICOM series that would normally be skipped.",
+        default=False,
+    )
     parser.add_argument("--anonymize", action="store_true", help="Anonymize DICOM data.")
     parser.add_argument("--date-shift-days", type=int, help="Number of days to shift dates.")
     parser.add_argument("--version", action="version", version="%(prog)s " + __version__)
@@ -175,6 +181,7 @@ def convert(args: Optional[List[str]] = None) -> None:
         args.date_shift_days,
         manual_names,
         None,
+        args.force_derived,
     )
 
 
