@@ -320,7 +320,7 @@ class BaseInfo:
                 "PD" if self.RepetitionTime is not None and self.RepetitionTime > 800 else "T1"
             )
 
-        body_part = "BRAIN"
+        body_part = "UNK"
         body_part_ex = "" if self.BodyPartExamined is None else self.BodyPartExamined.lower()
         study_desc = (
             "" if self.StudyDescription is None else self.StudyDescription.lower().replace(" ", "")
@@ -343,7 +343,7 @@ class BaseInfo:
             ),
             (r"(?<!\w)(lumb|l[ -]?sp|l.?spine)", "LSPINE"),
             (r"(\sc.?tl?(?:\s+|$)|^sp_|t1.ax.vibe|t1.vibe.tra|ax.t1.vibe)", "SPINE"),
-            (r"(orbit|thin|^on_)", "ORBITS"),
+            (r"(orbit|^on_)", "ORBITS"),
             (r"spine", "SPINE"),
         ]
 
