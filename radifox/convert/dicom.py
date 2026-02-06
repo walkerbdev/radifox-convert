@@ -6,7 +6,6 @@ from typing import Optional
 
 from pydicom import dcmread, Dataset, FileDataset
 from pydicom.errors import InvalidDicomError
-from pydicom.dicomdir import DicomDir
 
 from .base import BaseInfo, BaseSet, ImageOrientation, TruncatedImageValue, MATCHING_ITEMS
 from .lut import LookupTable
@@ -240,7 +239,7 @@ def sort_dicoms(dcm_dir: Path, force_dicom: bool = False) -> None:
                         continue
                 else:
                     continue
-            if isinstance(ds, DicomDir):
+            if "SOPClassUID" not in ds:
                 continue
             if ds.SOPClassUID not in ["1.2.840.10008.5.1.4.1.1.4", "1.2.840.10008.5.1.4.1.1.4.1"]:
                 continue
