@@ -22,7 +22,7 @@ dependencies = [
     "nibabel",
     "numpy",
     "radifox>=2.1.0",
-    "pydicom<3.0.0",
+    "pydicom",
 ]
 
 [project.scripts]
