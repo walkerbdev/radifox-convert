@@ -36,7 +36,7 @@ For a full listing of command line options, see [Advanced CLI Usage](#advanced-c
 The `radifox-convert` script is used to convert DICOM files to NIfTI files using the `dcm2niix` tool.
 It is a wrapper around `dcm2niix` that uses the RADIFOX naming system to organize the output files.
 
-Example Usage:
+**Single subject conversion:**
 ```bash
 radifox-convert \
     --output-root /path/to/output \
@@ -47,6 +47,17 @@ radifox-convert \
 ```
 This will copy the files in the direction `/path/to/dicom_files` to the output directory `/path/to/output/study/123456/STUDY-1/dcm`, organize them and convert them to NIfTI.
 The NIfTI files (and their JSON sidecar files) will be placed in `/path/to/output/study/STUDY-123456/1/nii`.
+
+**Batch conversion** (`--batch`):
+```bash
+radifox-convert /path/to/dicom_parent_dir \
+    --output-root /path/to/output \
+    --project-id study \
+    --batch
+```
+In batch mode, `source` is treated as a parent directory containing subject subdirectories.
+The `PatientID` from DICOM headers is used as the subject ID and each subdirectory is converted automatically.
+The `--subject-id` and `--session-id` options are not used in batch mode.
 
 #### `radifox-update`
 The `radifox-update` script is used to update naming for a directory of images.
@@ -172,6 +183,7 @@ Any output that is returned from the `run` method will have a QA image generated
 | `--date-shift-days`         | The number of days to shift the date by during anonymization.                                                                          | `None`                                            |
 | `--tms-metafile`            | The TMS metafile to use for subject, site and session ID.                                                                              | `None`                                            |
 | `--force-derived`           | Convert derived/secondary DICOM series that would normally be skipped (e.g., images converted from NIfTI back to DICOM).               | `False`                                           |
+| `--batch`                   | Treat source as a parent directory of subject subdirectories. Uses `PatientID` from DICOM headers as subject ID.                       | `False`                                           |
 
 ### `radifox-update`
 | Option             | Description                                                | Default                               |
